@@ -548,13 +548,7 @@
     const db = getFirestore(app);
 
     /* --------------------------------------------------------------------------
-     * 3. Google Gemini 생성형 AI 설정
-     * -------------------------------------------------------------------------- */
-    const GEMINI_API_KEY = "AQ.Ab8RN6LH-iiwZ1oGc8sXCGN9e9sgRaOAPAEQUhZJZs4xfQc3Tg";
-    const GEMINI_ENDPOINT = "https://generativelanguage.googleapis.com/v1/models/gemini-3.6-flash:generateContent";
-
-    /* --------------------------------------------------------------------------
-     * 4. DOM 요소 연결
+     * 3. DOM 요소 연결
      * -------------------------------------------------------------------------- */
     const diaryInput = document.getElementById('diaryInput');
     const charCount = document.getElementById('charCount');
@@ -583,7 +577,7 @@
     };
 
     /* --------------------------------------------------------------------------
-     * 5. 토스트 알림창 표시 함수
+     * 4. 토스트 알림창 표시 함수
      * -------------------------------------------------------------------------- */
     function showToast(message, duration = 3000) {
       toastText.textContent = message;
@@ -594,7 +588,7 @@
     }
 
     /* --------------------------------------------------------------------------
-     * 6. 글자 수 카운트 리스너
+     * 5. 글자 수 카운트 리스너
      * -------------------------------------------------------------------------- */
     diaryInput.addEventListener('input', () => {
       const length = diaryInput.value.length;
@@ -602,7 +596,7 @@
     });
 
     /* --------------------------------------------------------------------------
-     * 7. Web Speech API 음성 인식(STT)
+     * 6. Web Speech API 음성 인식(STT)
      * -------------------------------------------------------------------------- */
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     let recognition = null;
@@ -691,7 +685,8 @@
     }
 
     /* --------------------------------------------------------------------------
-     * 8. Google Gemini 생성형 AI 감정 분석 호출
+     * 7. 보안 백엔드(/api/analyze)를 통한 Gemini 생성형 AI 감정 분석 호출
+     *    (🔒 프론트엔드에 API 키가 전혀 노출되지 않는 안전한 방식)
      * -------------------------------------------------------------------------- */
     analyzeBtn.addEventListener('click', async () => {
       const diaryText = diaryInput.value.trim();
@@ -715,81 +710,27 @@
       aiResponseBox.classList.remove('highlight');
 
       try {
-        // Google Gemini API 요청 페이로드 구성 (구조화된 출력 적용)
-        const requestPayload = {
-          contents: [
-            {
-              role: "user",
-              parts: [
-                { text: `[사용자의 일기 내용]\n${diaryText}` }
-              ]
-            }
-          ],
-          systemInstruction: {
-            parts: [
-              {
-                text: `당신은 사람들의 지친 마음을 따뜻하게 안아주고 깊이 공감해 주는 다정한 AI 심리 상담사이자 일기 감정 분석 전문가입니다.
-사용자가 작성한 일기 내용을 꼼꼼히 읽고, 일기 속 구체적인 사건과 단어에 깊이 공감하는 100% 맞춤형 답변을 생성해 주세요.
-정형화된 문장이 아닌, 사용자가 쓴 상황에 맞춘 다정하고 섬세한 2~3줄의 위로/응원 메시지(aiMessage), 대표 감정 이모지 1개(emoji), 2~4단어의 한국어 감정 명칭(label)을 JSON 규격에 맞게 작성하세요.`
-              }
-            ]
-          },
-          generationConfig: {
-            temperature: 0.8,
-            maxOutputTokens: 1000,
-            responseMimeType: "application/json",
-            responseSchema: {
-              type: "OBJECT",
-              properties: {
-                emoji: {
-                  type: "STRING",
-                  description: "일기 내용의 핵심 감정을 나타내는 가장 잘 어울리는 대표 이모지 1개"
-                },
-                label: {
-                  type: "STRING",
-                  description: "해당 감정을 표현하는 2~4단어의 한국어 감정 명칭"
-                },
-                aiMessage: {
-                  type: "STRING",
-                  description: "일기 내용 속 구체적인 상황을 언급하며 건네는 2~3줄의 다정하고 따뜻한 위로 및 공감 메시지"
-                }
-              },
-              required: ["emoji", "label", "aiMessage"]
-            }
-          }
-        };
-
-        // Google Gemini API 호출
-        const response = await fetch(GEMINI_ENDPOINT, {
+        // 백엔드 서버리스 함수(/api/analyze) 호출
+        const response = await fetch('/api/analyze', {
           method: 'POST',
           headers: {
-            'Content-Type': 'application/json',
-            'x-goog-api-key': GEMINI_API_KEY
+            'Content-Type': 'application/json'
           },
-          body: JSON.stringify(requestPayload)
+          body: JSON.stringify({ diaryText })
         });
 
-        if (!response.ok) {
-          const errorText = await response.text();
-          throw new Error(`Gemini API 오류 (${response.status}): ${errorText}`);
+        const data = await response.json();
+
+        if (!response.ok || !data.success) {
+          throw new Error(data.error || data.message || data.details || 'Gemini 분석 요청에 실패했습니다.');
         }
-
-        const geminiResult = await response.json();
-        const rawContent = geminiResult.candidates?.[0]?.content?.parts?.[0]?.text;
-
-        if (!rawContent) {
-          throw new Error('Gemini AI로부터 생성된 답변이 없습니다.');
-        }
-
-        // 응답 JSON 파싱
-        const parsedData = JSON.parse(rawContent);
 
         // 전역 상태에 실시간 분석 결과 저장
         currentAnalysis = {
           analyzed: true,
-          emoji: parsedData.emoji || '🌿',
-          label: parsedData.label || '소중한 하루',
-          aiMessage: parsedData.aiMessage || '소중한 하루를 기록해 주셔서 감사해요. 오늘도 수고 많으셨어요.'
+          emoji: data.emoji || '🌿',
+          label: data.label || '소중한 하루',
+          aiMessage: data.aiMessage || '소중한 하루를 기록해 주셔서 감사해요. 오늘도 수고 많으셨어요.'
         };
 
         // UI 렌더링
@@ -818,7 +759,7 @@
     });
 
     /* --------------------------------------------------------------------------
-     * 9. '📝 새로 만들기' 버튼 (초기화)
+     * 8. '📝 새로 만들기' 버튼 (초기화)
      * -------------------------------------------------------------------------- */
     function resetForm() {
       diaryInput.value = '';
@@ -855,7 +796,7 @@
     });
 
     /* --------------------------------------------------------------------------
-     * 10. '💾 일기장 저장하기' 버튼 (Firebase Firestore 저장)
+     * 9. '💾 일기장 저장하기' 버튼 (Firebase Firestore 저장)
      * -------------------------------------------------------------------------- */
     saveBtn.addEventListener('click', async () => {
       const diaryText = diaryInput.value.trim();
