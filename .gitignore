@@ -1,0 +1,12 @@
+# 의존성 모듈 폴더
+node_modules/
+
+# 환경변수 파일 (API 키 보안 보호를 위해 깃허브 업로드 차단)
+.env
+.env.local
+.env.*.local
+
+# 로그 및 시스템 임시 파일
+*.log
+.DS_Store
+Thumbs.db
